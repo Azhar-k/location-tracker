@@ -4,7 +4,7 @@ import { Map, GoogleApiWrapper, Marker } from 'google-maps-react';
 import { db } from '../../firebase-config'
 import { IonButton, IonLoading } from '@ionic/react';
 
-const { App, BackgroundTask, Geolocation } = Plugins;
+const { App, BackgroundTask, LocalNotifications, Geolocation } = Plugins;
 
 
 class Location extends Component {
@@ -35,13 +35,15 @@ class Location extends Component {
 
     }
 
-    watchPosition = () => {
+    watchPosition = (source = null) => {
         const wait = Geolocation.watchPosition({}, (position, err) => {
             if (position.coords !== undefined) {
                 console.log('inside watch position');
                 console.log('response :' + position);
                 console.log('error : ' + err);
                 if (Math.abs(new Date().getTime() - this.state.currentTime) > 10000) {
+                    console.log('entered in if after 10sec');
+
                     this.setState({
                         currentCoordinate: position.coords,
                     })
@@ -51,11 +53,15 @@ class Location extends Component {
                     rootRef.push({
                         latitude: this.state.currentCoordinate.latitude,
                         longitude: this.state.currentCoordinate.longitude,
-                        source: 'background-task in while',
+                        source: source,
                     }).then(() => {
 
                     }).catch(error => {
                         console.log(error);
+                    });
+
+                    this.setState({
+                        currentTime: new Date().getTime()
                     });
                 }
             }
@@ -67,11 +73,9 @@ class Location extends Component {
         this.requestPermissions();
         console.log('Inside GeoLocation : Component did mount');
         this.getCurrentPosition();
-        this.watchPosition();
+        this.watchPosition('Foreground watchPosition');
         this.performBackgroundAction();
         console.log('current date : ' + this.state.currentTime);
-
-
     }
     performBackgroundAction = () => {
         App.addListener('appStateChange', (state) => {
@@ -104,7 +108,51 @@ class Location extends Component {
 
                     while (true) {
 
-                        this.watchPosition()
+
+                        if (Math.abs(new Date().getTime() - this.state.currentTime) > 10000) {
+                            Geolocation.getCurrentPosition().then(coordinates => {
+                                this.setState({
+                                    currentCoordinate: coordinates.coords,
+                                })
+
+                                const rootRef = db.ref('locations');
+                                rootRef.push({
+                                    latitude: this.state.currentCoordinate.latitude,
+                                    longitude: this.state.currentCoordinate.longitude,
+                                    source: 'position from while with 10 sec intrv',
+                                }).then(() => {
+
+                                }).catch(error => {
+                                    console.log(error);
+                                });
+
+
+                                // notification
+
+                                LocalNotifications.schedule({
+                                    notifications: [
+                                        {
+                                            title: "Last Known Location",
+                                            body: "Latitude: " + coordinates.coords.latitude + "Longitude: " + coordinates.coords.longitude,
+                                            id: 1,
+                                            schedule: { at: new Date(Date.now() + 1000 * 10) },
+                                            sound: null,
+                                            attachments: null,
+                                            actionTypeId: "",
+                                            extra: null
+                                        }
+                                    ]
+                                });
+
+                                // update current time
+                                this.setState({
+                                    currentTime: new Date().getTime()
+                                })
+                            })
+                        }
+
+
+                        //this.watchPosition('watchpos inside while loop')
 
                         // Geolocation.getCurrentPosition().then(coordinates => {
                         //     this.setState({
