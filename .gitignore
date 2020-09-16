@@ -11,6 +11,10 @@
 # production
 /build
 /android
+<<<<<<< HEAD
+=======
+
+>>>>>>> 58d645dbebd2b138807aae624e60b832df06bc26
 # misc
 .DS_Store
 .env.local
