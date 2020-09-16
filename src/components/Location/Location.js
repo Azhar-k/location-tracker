@@ -4,7 +4,7 @@ import { Map, GoogleApiWrapper, Marker } from 'google-maps-react';
 import { db } from '../../firebase-config'
 import { IonButton, IonLoading } from '@ionic/react';
 
-const { App, BackgroundTask, LocalNotifications, Geolocation } = Plugins;
+const { App, BackgroundTask, Geolocation } = Plugins;
 
 
 class Location extends Component {
@@ -12,7 +12,7 @@ class Location extends Component {
     state = {
         currentCoordinate: null,
         pushingLocation: false,
-        currentTime : new Date().getTime(),
+        currentTime: new Date().getTime(),
     }
 
     async requestPermissions() {
@@ -41,17 +41,13 @@ class Location extends Component {
                 console.log('inside watch position');
                 console.log('response :' + position);
                 console.log('error : ' + err);
-                if (Math.abs(new Date().getTime()-this.state.currentTime) > 10000) {
+                if (Math.abs(new Date().getTime() - this.state.currentTime) > 10000) {
                     this.setState({
                         currentCoordinate: position.coords,
                     })
                     this.pushLocation('watch position');
                 }
-
             }
-
-
-
         })
         console.log('wait :' + wait)
     }
@@ -62,8 +58,8 @@ class Location extends Component {
         this.getCurrentPosition();
         this.watchPosition();
         this.performBackgroundAction();
-        console.log('current date : '+ this.state.currentTime);
-       
+        console.log('current date : ' + this.state.currentTime);
+
 
     }
     performBackgroundAction = () => {
@@ -82,42 +78,66 @@ class Location extends Component {
                     console.log(' inside background task: before exit')
                     // In this function We might finish an upload, let a network request
                     // finish, persist some data, or perform some other task
+                    const rootRef = db.ref('locations');
+                    rootRef.push({
+                        latitude: this.state.currentCoordinate.latitude,
+                        longitude: this.state.currentCoordinate.longitude,
+                        source: 'background-task outside while',
+                    }).then(() => {
+
+
+                    }).catch(error => {
+                        console.log(error);
+                        this.setState({ pushingLocation: false });
+                    });
 
                     while (true) {
 
-
-                        Geolocation.getCurrentPosition().then(coordinates => {
-                            this.setState({
-                                currentCoordinate: coordinates.coords,
-                            })
-                            this.pushLocation('background task')
-                            LocalNotifications.schedule({
-                                notifications: [
-                                    {
-                                        title: "Last Known Location",
-                                        body: "Latitude: " + coordinates.coords.latitude + "Longitude: " + coordinates.coords.longitude,
-                                        id: 1,
-                                        schedule: { at: new Date(Date.now() + 1000 * 10) },
-                                        sound: null,
-                                        attachments: null,
-                                        actionTypeId: "",
-                                        extra: null
-                                    }
-                                ]
-                            });
+                        const rootRef = db.ref('locations');
+                        rootRef.push({
+                            latitude: this.state.currentCoordinate.latitude,
+                            longitude: this.state.currentCoordinate.longitude,
+                            source: 'background-task in while',
+                        }).then(() => {
 
                         }).catch(error => {
-                            console.log('background task :' + error)
+                            console.log(error);
+                            this.setState({ pushingLocation: false });
+                        });
 
-                        })
+                        // Geolocation.getCurrentPosition().then(coordinates => {
+                        //     this.setState({
+                        //         currentCoordinate: coordinates.coords,
+                        //     })
+                        //     this.pushLocation('background task')
+                        //     LocalNotifications.schedule({
+                        //         notifications: [
+                        //             {
+                        //                 title: "Last Known Location",
+                        //                 body: "Latitude: " + coordinates.coords.latitude + "Longitude: " + coordinates.coords.longitude,
+                        //                 id: 1,
+                        //                 schedule: { at: new Date(Date.now() + 1000 * 10) },
+                        //                 sound: null,
+                        //                 attachments: null,
+                        //                 actionTypeId: "",
+                        //                 extra: null
+                        //             }
+                        //         ]
+                        //     });
+
+                        // }).catch(error => {
+                        //     console.log('background task :' + error)
+
+                        // })
                     }
                     // Must call in order to end our task otherwise
                     // we risk our app being terminated, and possibly
                     // being labeled as impacting battery life
-                    console.log('inside background task : near finish')
-                    BackgroundTask.finish({
-                        taskId
-                    });
+                    // console.log('inside background task : near finish')
+
+                });
+                BackgroundTask.finish({
+                    taskId
                 });
             }
         })
