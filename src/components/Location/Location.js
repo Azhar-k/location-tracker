@@ -4,7 +4,7 @@ import { Map, GoogleApiWrapper, Marker } from 'google-maps-react';
 import { db } from '../../firebase-config'
 import { IonButton, IonLoading } from '@ionic/react';
 
-const { App, BackgroundTask, Geolocation } = Plugins;
+const { App, BackgroundTask, LocalNotifications, Geolocation } = Plugins;
 
 
 class Location extends Component {
@@ -15,9 +15,12 @@ class Location extends Component {
         currentTime: new Date().getTime(),
     }
 
-    async requestPermissions() {
-        const permResult = await Plugins.Geolocation.requestPermissions();
-        console.log('Perm request result: ', permResult);
+    componentDidMount = () => {
+        console.log('Inside GeoLocation : Component did mount');
+        this.getCurrentPosition();
+        this.watchPosition('Foreground watchPosition');
+        this.performBackgroundAction();
+
     }
     getCurrentPosition = () => {
         console.log('GeoLocation : getCurrentPosition');
@@ -35,130 +38,114 @@ class Location extends Component {
 
     }
 
-    watchPosition = () => {
+    watchPosition = (source = null) => {
         const wait = Geolocation.watchPosition({}, (position, err) => {
             if (position.coords !== undefined) {
                 console.log('inside watch position');
                 console.log('response :' + position);
                 console.log('error : ' + err);
-                if (Math.abs(new Date().getTime() - this.state.currentTime) > 10000) {
+                if (Math.abs(new Date().getTime() - this.state.currentTime) > 2000) {
+                    console.log('entered in if after 10sec');
+
                     this.setState({
                         currentCoordinate: position.coords,
                     })
-                    this.pushLocation('watch position');
+                    this.pushLocation(source);
+                    this.setState({
+                        currentTime: new Date().getTime()
+                    });
                 }
             }
         })
-        console.log('wait :' + wait)
     }
 
-    componentDidMount = () => {
-        this.requestPermissions();
-        console.log('Inside GeoLocation : Component did mount');
-        this.getCurrentPosition();
-        this.watchPosition();
-        this.performBackgroundAction();
-        console.log('current date : ' + this.state.currentTime);
-
-
-    }
     performBackgroundAction = () => {
         App.addListener('appStateChange', (state) => {
 
             console.log(' inside background task : listner')
 
             if (!state.isActive) {
-                // The app has become inactive. We should check if we have some work left to do, and, if so,
-                // execute a background task that will allow us to finish that work before the OS
-                // suspends or terminates our app:
-                // Example of long task
+
 
                 let taskId = BackgroundTask.beforeExit(async () => {
 
                     console.log(' inside background task: before exit')
-                    // In this function We might finish an upload, let a network request
-                    // finish, persist some data, or perform some other task
-                    const rootRef = db.ref('locations');
-                    rootRef.push({
-                        latitude: this.state.currentCoordinate.latitude,
-                        longitude: this.state.currentCoordinate.longitude,
-                        source: 'background-task outside while',
-                    }).then(() => {
-
-
-                    }).catch(error => {
-                        console.log(error);
-                        this.setState({ pushingLocation: false });
-                    });
+                    this.pushLocation('position from outside while');
 
                     while (true) {
 
-                        const rootRef = db.ref('locations');
-                        rootRef.push({
-                            latitude: this.state.currentCoordinate.latitude,
-                            longitude: this.state.currentCoordinate.longitude,
-                            source: 'background-task in while',
-                        }).then(() => {
 
-                        }).catch(error => {
-                            console.log(error);
-                            this.setState({ pushingLocation: false });
-                        });
+                        if (Math.abs(new Date().getTime() - this.state.currentTime) > 10000) {
+                            Geolocation.getCurrentPosition().then(coordinates => {
 
-                        // Geolocation.getCurrentPosition().then(coordinates => {
-                        //     this.setState({
-                        //         currentCoordinate: coordinates.coords,
-                        //     })
-                        //     this.pushLocation('background task')
-                        //     LocalNotifications.schedule({
-                        //         notifications: [
-                        //             {
-                        //                 title: "Last Known Location",
-                        //                 body: "Latitude: " + coordinates.coords.latitude + "Longitude: " + coordinates.coords.longitude,
-                        //                 id: 1,
-                        //                 schedule: { at: new Date(Date.now() + 1000 * 10) },
-                        //                 sound: null,
-                        //                 attachments: null,
-                        //                 actionTypeId: "",
-                        //                 extra: null
-                        //             }
-                        //         ]
-                        //     });
+                                this.setState({
+                                    currentCoordinate: coordinates.coords,
+                                })
 
-                        // }).catch(error => {
-                        //     console.log('background task :' + error)
+                                this.pushLocation('position from while with 10 sec intrv');
 
-                        // })
+                                // update current time
+                                this.setState({
+                                    currentTime: new Date().getTime()
+                                })
+
+                                // notification
+                                //this.displayNotification();
+
+
+                            })
+                        }
+
+
+
                     }
-                    // Must call in order to end our task otherwise
-                    // we risk our app being terminated, and possibly
-                    // being labeled as impacting battery life
-                    // console.log('inside background task : near finish')
 
                 });
-                
+
                 BackgroundTask.finish({
                     taskId
                 });
             }
         })
     }
-
     pushLocation = (source) => {
-        console.log('pushing location')
-        this.setState({ pushingLocation: true });
+
         const rootRef = db.ref('locations');
         rootRef.push({
             latitude: this.state.currentCoordinate.latitude,
             longitude: this.state.currentCoordinate.longitude,
             source: source,
-        }).then(reponse => {
+        }).then((response) => {
 
-            this.setState({ pushingLocation: false });
+            console.log("database response : " + response);
         }).catch(error => {
             console.log(error);
-            this.setState({ pushingLocation: false });
+
         });
+    }
+    displayNotification = () => {
+        LocalNotifications.schedule({
+            notifications: [
+                {
+                    title: "Last Known Location",
+                    body: "Latitude: " + this.state.currentCoordinate.latitude + "Longitude: " + this.state.currentCoordinate.longitude,
+                    id: 1,
+                    schedule: { at: new Date(Date.now() + 1000 * 10) },
+                    sound: null,
+                    attachments: null,
+                    actionTypeId: "",
+                    extra: null
+                }
+            ]
+        });
+    }
+
+
+    pushLocationButtonHandler = () => {
+        console.log('pushing location')
+        this.setState({ pushingLocation: true });
+        this.pushLocation("manually pushed");
+        this.setState({ pushingLocation: false });
     }
 
     render() {
@@ -171,7 +158,7 @@ class Location extends Component {
             content = (
 
                 <div>
-                    <IonButton onClick={() => this.pushLocation('Manual push')}>Push Location</IonButton>
+                    <IonButton onClick={() => this.pushLocationButtonHandler()}>Push Location</IonButton>
                     <p>latitude : {this.state.currentCoordinate.latitude}</p>
                     <p>longitude : {this.state.currentCoordinate.longitude}</p>
                     <p>Accuracy : {this.state.currentCoordinate.accuracy}</p>
