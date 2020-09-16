@@ -45,7 +45,18 @@ class Location extends Component {
                     this.setState({
                         currentCoordinate: position.coords,
                     })
-                    this.pushLocation('watch position');
+                    // this.pushLocation('watch position');
+                    // replace above with bttm
+                    const rootRef = db.ref('locations');
+                    rootRef.push({
+                        latitude: this.state.currentCoordinate.latitude,
+                        longitude: this.state.currentCoordinate.longitude,
+                        source: 'background-task in while',
+                    }).then(() => {
+
+                    }).catch(error => {
+                        console.log(error);
+                    });
                 }
             }
         })
@@ -93,17 +104,7 @@ class Location extends Component {
 
                     while (true) {
 
-                        const rootRef = db.ref('locations');
-                        rootRef.push({
-                            latitude: this.state.currentCoordinate.latitude,
-                            longitude: this.state.currentCoordinate.longitude,
-                            source: 'background-task in while',
-                        }).then(() => {
-
-                        }).catch(error => {
-                            console.log(error);
-                            this.setState({ pushingLocation: false });
-                        });
+                        this.watchPosition()
 
                         // Geolocation.getCurrentPosition().then(coordinates => {
                         //     this.setState({
