@@ -1,57 +1,157 @@
 import React, { Component } from 'react'
 import { Plugins } from '@capacitor/core';
 import { Map, GoogleApiWrapper } from 'google-maps-react';
+import { db } from '../../firebase-config'
+import { IonButton, IonLoading } from '@ionic/react';
 
-const { Geolocation } = Plugins;
+const { App, BackgroundTask, LocalNotifications, Geolocation } = Plugins;
+
 
 class Location extends Component {
 
     state = {
         currentCoordinate: null,
-    }
-    async getCurrentPosition() {
-        console.log('GeoLocation : getCurrentPosition');
-        const coordinates = await Geolocation.getCurrentPosition();
-        console.log('Current', coordinates.coords);
-        this.setState({
-            currentCoordinate: coordinates.coords,
-        })
+        pushingLocation: false,
     }
 
-    watchPosition() {
-        const wait = Geolocation.watchPosition({}, (position, err) => {
+
+
+    async requestPermissions() {
+        const permResult = await Plugins.Geolocation.requestPermissions();
+        console.log('Perm request result: ', permResult);
+    }
+    getCurrentPosition = () => {
+        console.log('GeoLocation : getCurrentPosition');
+        Geolocation.getCurrentPosition().then(coordinates => {
+            this.setState({
+                currentCoordinate: coordinates.coords,
+            })
+
+        }).catch(error => {
+            console.log('getCurrentPosition normal:' + error)
+
         })
+
+
+    }
+
+    watchPosition = () => {
+        const wait = Geolocation.watchPosition({}, (position, err) => {
+            console.log('inside watch position');
+            console.log('response :' + position);
+            console.log('error : ' + err);
+            this.setState({
+                currentCoordinate: position.coords,
+            })
+            this.pushLocation('watch position');
+
+        })
+        console.log('wait :' + wait)
     }
 
     componentDidMount = () => {
-        console.log('GeoLocation : Component did mount');
+        this.requestPermissions();
+        console.log('Inside GeoLocation : Component did mount');
         this.getCurrentPosition();
+        this.watchPosition();
+        this.performBackgroundAction();
+
+    }
+    performBackgroundAction = () => {
+        App.addListener('appStateChange', (state) => {
+
+            console.log(' inside background task : listner')
+
+            if (!state.isActive) {
+                // The app has become inactive. We should check if we have some work left to do, and, if so,
+                // execute a background task that will allow us to finish that work before the OS
+                // suspends or terminates our app:
+                // Example of long task
+
+                let taskId = BackgroundTask.beforeExit(async () => {
+
+                    console.log(' inside background task: before exit')
+                    // In this function We might finish an upload, let a network request
+                    // finish, persist some data, or perform some other task
+                    Geolocation.getCurrentPosition().then(coordinates => {
+                        this.setState({
+                            currentCoordinate: coordinates.coords,
+                        })
+                        this.pushLocation('background task')
+                        LocalNotifications.schedule({
+                            notifications: [
+                                {
+                                    title: "Last Known Location",
+                                    body: "Latitude: " + coordinates.coords.latitude + "Longitude: " + coordinates.coords.longitude,
+                                    id: 1,
+                                    schedule: { at: new Date(Date.now() + 1000 * 10) },
+                                    sound: null,
+                                    attachments: null,
+                                    actionTypeId: "",
+                                    extra: null
+                                }
+                            ]
+                        });
+
+                    }).catch(error => {
+                        console.log('background task :' + error)
+
+                    })
+
+                    // Must call in order to end our task otherwise
+                    // we risk our app being terminated, and possibly
+                    // being labeled as impacting battery life
+                    console.log('inside background task : near finish')
+                    BackgroundTask.finish({
+                        taskId
+                    });
+                });
+            }
+        })
+    }
+
+    pushLocation = (source) => {
+        this.setState({ pushingLocation: true });
+        const rootRef = db.ref('locations');
+        rootRef.push({
+            latitude: this.state.currentCoordinate.latitude,
+            longitude: this.state.currentCoordinate.longitude,
+            source: source,
+        }).then(reponse => {
+
+            this.setState({ pushingLocation: false });
+        }).catch(error => {
+            console.log(error);
+            this.setState({ pushingLocation: false });
+        });
     }
 
     render() {
         const mapStyles = {
             width: '300px',
             height: '300px',
-          };
-        let content=null;  
-        if(this.state.currentCoordinate!=null){
+        };
+        let content = null;
+        if (this.state.currentCoordinate != null) {
             content = (
-            
+
                 <div>
+                    <IonButton onClick={() => this.pushLocation('Manual push')}>Push Location</IonButton>
                     <p>latitude : {this.state.currentCoordinate.latitude}</p>
                     <p>longitude : {this.state.currentCoordinate.longitude}</p>
                     <Map
                         google={this.props.google}
                         zoom={8}
                         style={mapStyles}
-                        initialCenter={{ lat:this.state.currentCoordinate.latitude, lng:this.state.currentCoordinate.longitude }}
+                        initialCenter={{ lat: this.state.currentCoordinate.latitude, lng: this.state.currentCoordinate.longitude }}
                     />
-    
+                    <IonLoading isOpen={this.state.pushingLocation} />
+
                 </div>
             );
         }
         return (
-            
+
             <div>
                 {content}
 
@@ -64,4 +164,4 @@ class Location extends Component {
 
 export default GoogleApiWrapper({
     apiKey: 'AIzaSyCdvIE86J76z5rS_Dj8gko - kJDCN7pgsMI'
-  })(Location);
+})(Location);
