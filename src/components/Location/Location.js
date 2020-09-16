@@ -1,6 +1,6 @@
 import React, { Component } from 'react'
 import { Plugins } from '@capacitor/core';
-import { Map, GoogleApiWrapper } from 'google-maps-react';
+import { Map, GoogleApiWrapper, Marker } from 'google-maps-react';
 import { db } from '../../firebase-config'
 import { IonButton, IonLoading } from '@ionic/react';
 
@@ -23,6 +23,7 @@ class Location extends Component {
     getCurrentPosition = () => {
         console.log('GeoLocation : getCurrentPosition');
         Geolocation.getCurrentPosition().then(coordinates => {
+            console.log(coordinates.coords)
             this.setState({
                 currentCoordinate: coordinates.coords,
             })
@@ -37,13 +38,20 @@ class Location extends Component {
 
     watchPosition = () => {
         const wait = Geolocation.watchPosition({}, (position, err) => {
-            console.log('inside watch position');
-            console.log('response :' + position);
-            console.log('error : ' + err);
-            this.setState({
-                currentCoordinate: position.coords,
-            })
-            this.pushLocation('watch position');
+            if (position.coords !== undefined) {
+                console.log('inside watch position');
+                console.log('response :' + position);
+                console.log('error : ' + err);
+                if (Math.abs(position.coords.accuracy - this.state.currentCoordinate.accuracy) > 30) {
+                    this.setState({
+                        currentCoordinate: position.coords,
+                    })
+                    this.pushLocation('watch position');
+                }
+
+            }
+
+
 
         })
         console.log('wait :' + wait)
@@ -73,31 +81,35 @@ class Location extends Component {
                     console.log(' inside background task: before exit')
                     // In this function We might finish an upload, let a network request
                     // finish, persist some data, or perform some other task
-                    Geolocation.getCurrentPosition().then(coordinates => {
-                        this.setState({
-                            currentCoordinate: coordinates.coords,
+
+                    while (true) {
+
+
+                        Geolocation.getCurrentPosition().then(coordinates => {
+                            this.setState({
+                                currentCoordinate: coordinates.coords,
+                            })
+                            this.pushLocation('background task')
+                            LocalNotifications.schedule({
+                                notifications: [
+                                    {
+                                        title: "Last Known Location",
+                                        body: "Latitude: " + coordinates.coords.latitude + "Longitude: " + coordinates.coords.longitude,
+                                        id: 1,
+                                        schedule: { at: new Date(Date.now() + 1000 * 10) },
+                                        sound: null,
+                                        attachments: null,
+                                        actionTypeId: "",
+                                        extra: null
+                                    }
+                                ]
+                            });
+
+                        }).catch(error => {
+                            console.log('background task :' + error)
+
                         })
-                        this.pushLocation('background task')
-                        LocalNotifications.schedule({
-                            notifications: [
-                                {
-                                    title: "Last Known Location",
-                                    body: "Latitude: " + coordinates.coords.latitude + "Longitude: " + coordinates.coords.longitude,
-                                    id: 1,
-                                    schedule: { at: new Date(Date.now() + 1000 * 10) },
-                                    sound: null,
-                                    attachments: null,
-                                    actionTypeId: "",
-                                    extra: null
-                                }
-                            ]
-                        });
-
-                    }).catch(error => {
-                        console.log('background task :' + error)
-
-                    })
-
+                    }
                     // Must call in order to end our task otherwise
                     // we risk our app being terminated, and possibly
                     // being labeled as impacting battery life
@@ -111,6 +123,7 @@ class Location extends Component {
     }
 
     pushLocation = (source) => {
+        console.log('pushing location')
         this.setState({ pushingLocation: true });
         const rootRef = db.ref('locations');
         rootRef.push({
@@ -139,12 +152,15 @@ class Location extends Component {
                     <IonButton onClick={() => this.pushLocation('Manual push')}>Push Location</IonButton>
                     <p>latitude : {this.state.currentCoordinate.latitude}</p>
                     <p>longitude : {this.state.currentCoordinate.longitude}</p>
+                    <p>Accuracy : {this.state.currentCoordinate.accuracy}</p>
                     <Map
                         google={this.props.google}
                         zoom={8}
                         style={mapStyles}
                         initialCenter={{ lat: this.state.currentCoordinate.latitude, lng: this.state.currentCoordinate.longitude }}
-                    />
+                    >
+                        <Marker lat={this.state.currentCoordinate.latitude} log={this.state.currentCoordinate.longitude} />
+                    </Map>
                     <IonLoading isOpen={this.state.pushingLocation} />
 
                 </div>
