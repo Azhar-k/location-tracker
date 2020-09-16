@@ -12,9 +12,8 @@ class Location extends Component {
     state = {
         currentCoordinate: null,
         pushingLocation: false,
+        currentTime : new Date().getTime(),
     }
-
-
 
     async requestPermissions() {
         const permResult = await Plugins.Geolocation.requestPermissions();
@@ -42,7 +41,7 @@ class Location extends Component {
                 console.log('inside watch position');
                 console.log('response :' + position);
                 console.log('error : ' + err);
-                if (Math.abs(position.coords.accuracy - this.state.currentCoordinate.accuracy) > 30) {
+                if (Math.abs(new Date().getTime()-this.state.currentTime) > 10000) {
                     this.setState({
                         currentCoordinate: position.coords,
                     })
@@ -63,6 +62,8 @@ class Location extends Component {
         this.getCurrentPosition();
         this.watchPosition();
         this.performBackgroundAction();
+        console.log('current date : '+ this.state.currentTime);
+       
 
     }
     performBackgroundAction = () => {
