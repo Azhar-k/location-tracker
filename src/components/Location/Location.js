@@ -2,7 +2,7 @@ import React, { Component } from 'react'
 import { Plugins } from '@capacitor/core';
 import { Map, GoogleApiWrapper, Marker } from 'google-maps-react';
 import { db } from '../../firebase-config'
-import { IonButton, IonLoading } from '@ionic/react';
+import { IonButton, IonLoading,IonItem, IonLabel,IonSelect,IonSelectOption } from '@ionic/react';
 
 const { App, BackgroundTask, LocalNotifications, Geolocation } = Plugins;
 
@@ -13,6 +13,7 @@ class Location extends Component {
         currentCoordinate: null,
         pushingLocation: false,
         currentTime: new Date().getTime(),
+        user:'faris'
     }
 
     componentDidMount = () => {
@@ -46,7 +47,6 @@ class Location extends Component {
                 console.log('error : ' + err);
                 if (Math.abs(new Date().getTime() - this.state.currentTime) > 2000) {
                     console.log('entered in if after 10sec');
-
                     this.setState({
                         currentCoordinate: position.coords,
                     })
@@ -65,46 +65,22 @@ class Location extends Component {
             console.log(' inside background task : listner')
 
             if (!state.isActive) {
-
+                this.getCurrentPosition();
+                this.pushLocation('This is the first bg location')
 
                 let taskId = BackgroundTask.beforeExit(async () => {
 
-                    console.log(' inside background task: before exit')
-                    this.pushLocation('position from outside while');
-
                     while (true) {
-
-
-                        if (Math.abs(new Date().getTime() - this.state.currentTime) > 10000) {
-                            Geolocation.getCurrentPosition().then(coordinates => {
-
-                                this.setState({
-                                    currentCoordinate: coordinates.coords,
-                                })
-
-                                this.pushLocation('position from while with 10 sec intrv');
-
-                                // update current time
-                                this.setState({
-                                    currentTime: new Date().getTime()
-                                })
-
-                                // notification
-                                //this.displayNotification();
-
-
-                            })
+                        if (new Date().getTime() % 10000 === 0) {
+                            this.getCurrentPosition();
+                            this.pushLocation('This is a background location')
                         }
-
-
-
                     }
-
+                    BackgroundTask.finish({
+                        taskId
+                    });
                 });
 
-                BackgroundTask.finish({
-                    taskId
-                });
             }
         })
     }
@@ -115,6 +91,7 @@ class Location extends Component {
             latitude: this.state.currentCoordinate.latitude,
             longitude: this.state.currentCoordinate.longitude,
             source: source,
+            time: new Date().toLocaleString()
         }).then((response) => {
 
             console.log("database response : " + response);
@@ -122,6 +99,14 @@ class Location extends Component {
             console.log(error);
 
         });
+        // static field
+        const constLoc = db.ref('fixedlocation/'+this.state.user);
+        constLoc.set({
+            latitude: this.state.currentCoordinate.latitude,
+            longitude: this.state.currentCoordinate.longitude,
+            source: source,
+            update_time: new Date().toLocaleString()
+        })
     }
     displayNotification = () => {
         LocalNotifications.schedule({
@@ -148,9 +133,15 @@ class Location extends Component {
         this.setState({ pushingLocation: false });
     }
 
+    setUser=(user)=>{
+        this.setState({
+            user:user
+        })
+    }
+
     render() {
         const mapStyles = {
-            width: '300px',
+            width: '100%',
             height: '300px',
         };
         let content = null;
@@ -158,13 +149,21 @@ class Location extends Component {
             content = (
 
                 <div>
+                    <IonItem>
+                        <IonLabel>Select User</IonLabel>
+                        <IonSelect value={this.state.user} placeholder="Select One" onIonChange={e => this.setUser(e.detail.value)}>
+                            <IonSelectOption value="faris">Faris</IonSelectOption>
+                            <IonSelectOption value="azhar">Azhar</IonSelectOption>
+                            <IonSelectOption value="fasal">Fasal</IonSelectOption>
+                        </IonSelect>
+                    </IonItem>
                     <IonButton onClick={() => this.pushLocationButtonHandler()}>Push Location</IonButton>
                     <p>latitude : {this.state.currentCoordinate.latitude}</p>
                     <p>longitude : {this.state.currentCoordinate.longitude}</p>
                     <p>Accuracy : {this.state.currentCoordinate.accuracy}</p>
                     <Map
                         google={this.props.google}
-                        zoom={8}
+                        zoom={16}
                         style={mapStyles}
                         initialCenter={{ lat: this.state.currentCoordinate.latitude, lng: this.state.currentCoordinate.longitude }}
                     >
